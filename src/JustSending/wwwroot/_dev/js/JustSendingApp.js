@@ -1,4 +1,7 @@
 ﻿var JustSendingApp = {
+    option_bufferedFileEnc: true,
+
+
     hub: null,
 
     init: function () {
@@ -228,7 +231,7 @@
     },
 
     finishedStreamingFile: false,
-
+    
     beforeSubmit: function (formData, formObject, formOptions) {
         var hasFile = false;
 
@@ -264,35 +267,40 @@
         }
 
         if ($("#file")[0].files.length > 0) {
-
-            JustSendingApp.finishedStreamingFile = false;
-            formOptions.url += "/files-stream";
-            hasFile = true;
             
-            /*var file = $("#file")[0].files[0];
+            if (JustSendingApp.option_bufferedFileEnc) {
 
-            JustSendingApp.processFile(file, function () {
-                // Unselect file
-                //
-                $("#file").val("");
-                // Do normal post
-                //
-                JustSendingApp.finishedStreamingFile = true;
-                $("#form").submit();
-            });
+                var file = $("#file")[0].files[0];
+                
+                JustSendingApp.processFile(file, function () {
+                    // Unselect file
+                    //
+                    $("#file").val("");
+                    // Do normal post
+                    //
+                    JustSendingApp.finishedStreamingFile = true;
+                    $("#form").submit();
+                });
+                
+                return false;
 
-            return false;*/
+            } else {
+                hasFile = true;
+                JustSendingApp.finishedStreamingFile = false;
+                formOptions.url += "/files-stream";
+            }
 
         } else if (JustSendingApp.finishedStreamingFile) {
             
             JustSendingApp.finishedStreamingFile = false;
             formOptions.url += "/files";
+            hasFile = true;
 
         }
 
         JustSendingApp.showStatus("Sending, please wait...");
 
-        if(!hasFile)
+        if (!hasFile)
             replaceFormValue("ComposerText", function (v) { return EndToEndEncryption.encryptWithPrivateKey(v); });
 
         return true;
@@ -300,9 +308,10 @@
 
     processFile: function (file, done) {
         var fileSize = file.size;
-        var bufferSize = 64 * 1024;
+        var bufferSize = 512 * 1024;
         var offset = 0;
         var sessionId = $("#SessionId").val();
+        var connectionId = $("#SocketConnectionId").val();
         var self = this;
         var pageOneSent = false;
 
@@ -311,20 +320,40 @@
             if (evt.target.error == null) {
                 offset += evt.target.result.length;
 
-                var encData = EndToEndEncryption.encryptWithPrivateKey(evt.target.result);
-                if (pageOneSent) {
-                    var j = JSON.parse(encData);
-                    encData = JSON.stringify({
-                        iv: j.iv,
-                        ct: j.ct
-                    });
-                    j = null;
-                }
+                var encData;
+                if (JustSendingApp.option_bufferedFileEnc) {
+                    
+                    encData = EndToEndEncryption.encryptBufferWithPrivateKey(evt.target.result);
 
+                } else {
+
+                    encData = EndToEndEncryption.encryptWithPrivateKey(evt.target.result);
+                    if (pageOneSent) {
+                        var j = JSON.parse(encData);
+                        encData = JSON.stringify({
+                            iv: j.iv,
+                            ct: j.ct
+                        });
+                        j = null;
+                    }
+
+                }    
+                
+                Log("Streaming " + encData.length + " bytes");
+
+                /*
                 self
                     .hub
                     .server
                     .streamFile(sessionId, encData)
+                    .fail(function (t) {
+                        swal({
+                            title: "Can't send the file!",
+                            text: t,
+                            type: "error"
+                        });
+                        app_busy(false);
+                    })
                     .then(function () {
                         pageOneSent = true;
 
@@ -332,7 +361,35 @@
                         //
                         readBuffer(offset, bufferSize, file);
                     });
-                
+                */
+                ajax_service.sendRequest("POST", "/app/post/fbuffer", {
+                    connectionId: connectionId,
+                    content: encData
+                }, function () {
+                    //
+                    // Success
+                    //
+                    pageOneSent = true;
+                    
+                    // read the next block
+                    //
+                    if(!isDone())
+                        readBuffer(offset, bufferSize, file);
+                    
+                }, function (jqXhr, textStatus, errorThrow) {
+                    //
+                    // Error
+                    //    
+                    console.log(jqXhr);
+                    swal({
+                        title: "Can't send the file!",
+                        text: textStatus,
+                        type: "error"
+                    });
+                    app_busy(false);
+                        
+                }, true, null);
+
                 self.showStatus("Encrypting...", parseInt(offset * 100 / fileSize));
 
             } else {
@@ -340,14 +397,18 @@
                 app_busy(false);
                 return;
             }
-            if (offset >= fileSize) {
-                Log("Done streaming file...");
-                
-                r.onload = null;
-                app_busy(false);
-                done(file.name)
-                return;
-            }
+
+            var isDone = function () {
+                if (offset >= fileSize) {
+                    Log("Done streaming file...");
+                    
+                    r.onload = null;
+                    app_busy(false);
+                    done(file.name)
+                    return true;
+                }
+                return false;
+            };
 
         }
     

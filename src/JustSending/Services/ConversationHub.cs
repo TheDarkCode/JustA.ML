@@ -26,7 +26,7 @@ namespace JustSending.Services
         private readonly IConfiguration _config;
 
         private readonly long _maxUploadSize;
-        private readonly string _uploadFolder;
+        public readonly string UploadFolder;
 
         public ConversationHub(AppDbContext db,
                     IConnectionManager connectionManager,
@@ -39,9 +39,9 @@ namespace JustSending.Services
             _config = config;
 
             _maxUploadSize = Convert.ToInt64(_config["MaxUploadSizeBytes"]);
-            _uploadFolder = AppController.GetUploadFolder(string.Empty, _env.WebRootPath);
+            UploadFolder = AppController.GetUploadFolder(string.Empty, _env.WebRootPath);
 
-            if (!Directory.Exists(_uploadFolder)) Directory.CreateDirectory(_uploadFolder);
+            if (!Directory.Exists(UploadFolder)) Directory.CreateDirectory(UploadFolder);
         }
 
         internal void RequestReloadMessage(string sessionId)
@@ -156,7 +156,7 @@ namespace JustSending.Services
 
         public async Task StreamFile(string sessionId, string content)
         {
-            var uploadPath = Path.Combine(_uploadFolder, Context.ConnectionId + ConversationHub.FILE_EXT);
+            var uploadPath = Path.Combine(UploadFolder, Context.ConnectionId + ConversationHub.FILE_EXT);
 
             await File.AppendAllLinesAsync(uploadPath, new[] { content });
         }

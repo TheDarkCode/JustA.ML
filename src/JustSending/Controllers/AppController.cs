@@ -162,7 +162,7 @@ namespace JustSending.Controllers
 
             var message = GetMessageFromModel(model);
             var uploadFolder = GetUploadFolder(model.SessionId, _env.WebRootPath);
-            var moveToPath = Path.Combine(uploadFolder, message.Id + ConversationHub.FILE_EXT);
+            var moveToPath = Path.Combine(uploadFolder, model.ComposerText);
 
             if (!Directory.Exists(uploadFolder))
                 Directory.CreateDirectory(uploadFolder);
@@ -181,6 +181,17 @@ namespace JustSending.Controllers
             message.FileSizeBytes = fileInfo.Length;
 
             return SaveMessageAndReturnResponse(message);
+        }
+
+        [HttpPost]
+        [Route("post/fbuffer")]
+        public async Task<IActionResult> StreamFile(string connectionId, int[] content)
+        {
+            var uploadPath = Path.Combine(_hub.UploadFolder, connectionId + ConversationHub.FILE_EXT);
+
+            //await IOFile.AppendAllLinesAsync(uploadPath, new[] { content });
+
+            return Accepted();
         }
 
         private void DeleteIfExists(string path)

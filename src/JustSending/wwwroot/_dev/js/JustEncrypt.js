@@ -326,7 +326,52 @@ var EndToEndEncryption = {
 
     decrypt: function (data, secret) {
         return sjcl.decrypt(secret, data);
+    },
+
+    encryptBufferWithPrivateKey: function (bufferData) {
+        return StupidCryptography.encrypt(this.private_key, bufferData);
     }
+}
+
+var StupidCryptography = {
+    
+    hashOf: function (s) {
+        return sjcl.codec.base64.fromBits(sjcl.hash.sha256.hash(s));
+    },
+    
+    encrypt: function (key, data) {
+        return this.encDec(key, data, function (d, k) {
+            return d + k;
+        });
+    },
+    
+    decrypt: function (key, data) {
+        return this.encDec(key, data, function (d, k) {
+            return d - k;
+        });
+    },
+    
+    encDec: function (key, data, func) {
+        var result = new Array(data.length);
+        var keyHash = this.hashOf(key);
+    
+        for (var i = 0; i < data.length; i++) {
+            var j = data.length - i - 1;
+    
+            result[i] = this.encDecBit(keyHash, data, func, i);
+            result[j] = this.encDecBit(keyHash, data, func, j);
+        }
+    
+        return result.join("");
+    },
+      
+    encDecBit: function (keyHash, data, func, i) {
+        var currentChar = data[i];
+        var keyHashChar = keyHash[i % keyHash.length];
+        
+        return String.fromCharCode(func(currentChar.charCodeAt(), keyHashChar.charCodeAt()));
+    }
+    
 }
 
 var PrimeHelper = {
