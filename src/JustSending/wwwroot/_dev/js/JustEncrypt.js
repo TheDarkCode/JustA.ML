@@ -329,7 +329,7 @@ var EndToEndEncryption = {
     },
 
     encryptBufferWithPrivateKey: function (bufferData) {
-        return StupidCryptography.encrypt(this.private_key, bufferData);
+        return JSON.stringify(StupidCryptography.encrypt(this.private_key, bufferData));
     }
 }
 
@@ -353,15 +353,18 @@ var StupidCryptography = {
     
     encDec: function (key, data, func) {
         var result = new Array(data.length);
-        var keyHash = this.hashOf(key);
-    
+        var keyHash = key == null ? "" : this.hashOf(key);
+        if (key != null) {
+            keyHash = this.encDec(null, keyHash, function (i, j) { return i - 48; });
+        }
+        
         for (var i = 0; i < data.length; i++) {
             var j = data.length - i - 1;
     
             result[i] = this.encDecBit(keyHash, data, func, i);
             result[j] = this.encDecBit(keyHash, data, func, j);
         }
-    
+        
         return result.join("");
     },
       
@@ -369,7 +372,7 @@ var StupidCryptography = {
         var currentChar = data[i];
         var keyHashChar = keyHash[i % keyHash.length];
         
-        return String.fromCharCode(func(currentChar.charCodeAt(), keyHashChar.charCodeAt()));
+        return String.fromCharCode(func(currentChar.charCodeAt(), keyHashChar != null ? keyHashChar.charCodeAt() : ""));
     }
     
 }

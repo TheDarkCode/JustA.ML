@@ -3,6 +3,7 @@ using JustSending.Services;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -52,7 +53,9 @@ namespace JustALink
 
             app.UseStaticFiles();
             app.UseWebSockets();
-            app.UseSignalR();
+            app.UseSignalR(config => {
+                
+            });
             app.UseMvc(routes =>
             {
                 routes.MapRoute(

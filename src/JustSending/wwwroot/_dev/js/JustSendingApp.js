@@ -341,7 +341,7 @@
                 
                 Log("Streaming " + encData.length + " bytes");
 
-                /*
+                
                 self
                     .hub
                     .server
@@ -359,36 +359,10 @@
 
                         // read the next block
                         //
-                        readBuffer(offset, bufferSize, file);
+                        if (!isDone())
+                            readBuffer(offset, bufferSize, file);
                     });
-                */
-                ajax_service.sendRequest("POST", "/app/post/fbuffer", {
-                    connectionId: connectionId,
-                    content: encData
-                }, function () {
-                    //
-                    // Success
-                    //
-                    pageOneSent = true;
-                    
-                    // read the next block
-                    //
-                    if(!isDone())
-                        readBuffer(offset, bufferSize, file);
-                    
-                }, function (jqXhr, textStatus, errorThrow) {
-                    //
-                    // Error
-                    //    
-                    console.log(jqXhr);
-                    swal({
-                        title: "Can't send the file!",
-                        text: textStatus,
-                        type: "error"
-                    });
-                    app_busy(false);
-                        
-                }, true, null);
+                
 
                 self.showStatus("Encrypting...", parseInt(offset * 100 / fileSize));
 
@@ -416,7 +390,7 @@
         r.onload = load;
 
         var readBuffer = function (_offset, length, _file) {
-            var blob = _file.slice(_offset, length + _offset);
+            var blob = _file.slice(_offset, _offset + length);
             r.readAsText(blob);
         }
 

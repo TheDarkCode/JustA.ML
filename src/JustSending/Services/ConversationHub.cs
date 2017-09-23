@@ -7,7 +7,6 @@ using JustSending.Controllers;
 using JustSending.Data;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.SignalR;
-using Microsoft.AspNetCore.SignalR.Infrastructure;
 using Microsoft.Extensions.Configuration;
 
 namespace JustSending.Services
@@ -21,7 +20,6 @@ namespace JustSending.Services
 #endif
 
         private readonly AppDbContext _db;
-        private readonly IConnectionManager _connectionManager;
         private readonly IHostingEnvironment _env;
         private readonly IConfiguration _config;
 
@@ -29,12 +27,11 @@ namespace JustSending.Services
         public readonly string UploadFolder;
 
         public ConversationHub(AppDbContext db,
-                    IConnectionManager connectionManager,
                     IHostingEnvironment env,
                     IConfiguration config)
         {
             _db = db;
-            _connectionManager = connectionManager;
+            //_connectionManager = connectionManager;
             _env = env;
             _config = config;
 
@@ -46,27 +43,27 @@ namespace JustSending.Services
 
         internal void RequestReloadMessage(string sessionId)
         {
-            GetClients(sessionId).requestReloadMessage();
+            GetClients(sessionId).InvokeAsync("requestReloadMessage");
         }
 
         internal void ShowSharePanel(string sessionId, int token)
         {
-            GetClients(sessionId).showSharePanel(token.ToString("### ###"));
+            GetClients(sessionId).InvokeAsync("showSharePanel", token.ToString("### ###"));
         }
 
         internal void HideSharePanel(string sessionId)
         {
-            GetClients(sessionId).hideSharePanel();
+            GetClients(sessionId).InvokeAsync("hideSharePanel");
         }
 
         internal void SessionDeleted(string sessionId)
         {
-            GetClients(sessionId).sessionDeleted();
+            GetClients(sessionId).InvokeAsync("sessionDeleted");
         }
 
         internal void SendNumberOfDevices(string sessionId, int count)
         {
-            GetClients(sessionId).setNumberOfDevices(count);
+            GetClients(sessionId).InvokeAsync("setNumberOfDevices", count);
         }
 
         internal int SendNumberOfDevices(string sessionId)
@@ -76,32 +73,35 @@ namespace JustSending.Services
             return numConnectedDevices;
         }
 
-        private dynamic GetClients(string sessionId, string except = null)
+        private IClientProxy GetClients(string sessionId, string except = null)
         {
-            var connectionIds = _db.FindClient(sessionId);
+            // var connectionIds = _db.FindClient(sessionId);
 
-            if (!string.IsNullOrEmpty(except))
-            {
-                connectionIds = connectionIds.Where(x => x != except);
-            }
+            // if (!string.IsNullOrEmpty(except))
+            // {
+            //     connectionIds = connectionIds.Where(x => x != except);
+            // }
 
-            return CurrentHub.Clients.Clients(connectionIds.ToList());
+            // return Clients.Client(connectionIds.ToList());
+            return Clients.Group(sessionId);
+
         }
 
-        private dynamic GetClient(string connectionId) => CurrentHub.Clients.Client(connectionId);
-
-        private IHubContext CurrentHub => _connectionManager.GetHubContext<ConversationHub>();
+        private dynamic GetClient(string connectionId) => Clients.Client(connectionId);
 
         private const string stringSessionKey = "session";
-        public override Task OnConnected()
+        public override async Task OnConnectedAsync()
         {
             _db.RecordStats(s => s.Devices++);
-            return Task.CompletedTask;
+
+            await Task.CompletedTask;
         }
 
-        public override Task OnDisconnected(bool stopCalled)
+        public override async Task OnDisconnectedAsync(Exception ex)
         {
             var sessionId = _db.UntrackClientReturnSessionId(Context.ConnectionId);
+            await Groups.RemoveAsync(Context.ConnectionId, sessionId);
+
             if (!string.IsNullOrEmpty(sessionId))
             {
                 var numDevices = SendNumberOfDevices(sessionId);
@@ -115,7 +115,7 @@ namespace JustSending.Services
                 }
             }
 
-            return Task.CompletedTask;
+            await Task.CompletedTask;
         }
 
         private void AddSessionNotification(string sessionId, string message)
@@ -134,8 +134,10 @@ namespace JustSending.Services
             RequestReloadMessage(sessionId);
         }
 
-        public string Connect(string sessionId)
+        public async Task<string> Connect(string sessionId)
         {
+            await Groups.AddAsync(Context.ConnectionId, sessionId);
+
             _db.TrackClient(sessionId, Context.ConnectionId);
 
             // Check if any active share token is open
@@ -147,7 +149,7 @@ namespace JustSending.Services
 
             if (numDevices > 1)
             {
-                InitKeyExchange(sessionId);
+                await InitKeyExchange(sessionId);
                 CancelShare();
             }
 
@@ -163,7 +165,7 @@ namespace JustSending.Services
 
         #region KeyExchange
 
-        private void InitKeyExchange(string sessionId)
+        private async Task InitKeyExchange(string sessionId)
         {
             // enable end to end encryption
             //
@@ -182,18 +184,16 @@ namespace JustSending.Services
             var g = Helper.GetPrime(2, _env);
             var pka = Guid.NewGuid().ToString("N");
 
-            var initFirstDevice = (Task<object>)CurrentHub
-                .Clients
+            var initFirstDevice = (Task<object>)Clients
                 .Client(firstDeviceId)
-                .startKeyExchange(newDevice, p, g, pka, false);
+                .InvokeAsync("startKeyExchange", newDevice, p, g, pka, false);
 
-            initFirstDevice.ContinueWith(x =>
+            await initFirstDevice.ContinueWith(async x =>
             {
 
-                CurrentHub
-                .Clients
+                await Clients
                 .Client(newDevice)
-                .startKeyExchange(firstDeviceId, p, g, pka, true);
+                .InvokeAsync("startKeyExchange", firstDeviceId, p, g, pka, true);
 
             });
 
@@ -329,11 +329,5 @@ namespace JustSending.Services
                                 .Connections
                                 .FindOne(x => x.ConnectionId == Context.ConnectionId)
                                 .SessionId;
-
-
-        public override Task OnReconnected()
-        {
-            return OnConnected();
-        }
     }
 }

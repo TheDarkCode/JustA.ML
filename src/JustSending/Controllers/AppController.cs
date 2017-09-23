@@ -183,17 +183,6 @@ namespace JustSending.Controllers
             return SaveMessageAndReturnResponse(message);
         }
 
-        [HttpPost]
-        [Route("post/fbuffer")]
-        public async Task<IActionResult> StreamFile(string connectionId, int[] content)
-        {
-            var uploadPath = Path.Combine(_hub.UploadFolder, connectionId + ConversationHub.FILE_EXT);
-
-            //await IOFile.AppendAllLinesAsync(uploadPath, new[] { content });
-
-            return Accepted();
-        }
-
         private void DeleteIfExists(string path)
         {
             if (IOFile.Exists(path))
